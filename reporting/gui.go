@@ -431,8 +431,8 @@ func (self *GuiTemplateEngine) Execute(report *artifacts_proto.Report) (string, 
 	*/
 
 	// Sanitize the HTML.
-	result := bm_policy.Sanitize(output_string)
-	return result, nil
+	sanitized := bm_policy.Sanitize(output_string)
+	return truncateChromaLines(sanitized, 200), nil
 }
 
 func (self *GuiTemplateEngine) getMultiLineQuery(query string) (string, error) {
@@ -644,6 +644,90 @@ func NewGuiTemplateEngine(
 			},
 		})
 	return template_engine, nil
+}
+
+// truncateChromaLines limits each line in chroma-highlighted HTML to maxLen
+// visible characters, appending " ..." when truncated.
+func truncateChromaLines(htmlIn string, maxLen int) string {
+	lines := strings.SplitAfter(htmlIn, "\n")
+	for i, line := range lines {
+		excess := htmlVisibleLen(line) - maxLen
+		if excess > 0 {
+			lines[i] = dropLastNVisible(line, excess) + " ...\n"
+		}
+	}
+	return strings.Join(lines, "")
+}
+
+// htmlVisibleLen counts visible characters in an HTML string, excluding tags;
+// entities (e.g. &#39;) count as 1.
+func htmlVisibleLen(s string) int {
+	n := 0
+	inTag := false
+	for i := 0; i < len(s); {
+		ch := s[i]
+		if ch == '<' {
+			inTag = true
+			i++
+			continue
+		}
+		if ch == '>' {
+			inTag = false
+			i++
+			continue
+		}
+		if inTag {
+			i++
+			continue
+		}
+		if ch == '&' {
+			if end := strings.IndexByte(s[i:], ';'); end >= 0 {
+				n++
+				i += end + 1
+				continue
+			}
+		}
+		n++
+		i++
+	}
+	return n
+}
+
+// dropLastNVisible removes the last n visible characters from an HTML string
+// and closes any open <span> tags at the cut point.
+func dropLastNVisible(s string, n int) string {
+	i := len(s)
+	for n > 0 && i > 0 {
+		i--
+		switch {
+		case s[i] == '>':
+			// skip tag going backwards
+			for i > 0 && s[i] != '<' {
+				i--
+			}
+		case s[i] == ';':
+			// check for HTML entity (e.g. &#39;)
+			j := i - 1
+			for j >= 0 && i-j <= 7 && s[j] != '&' {
+				j--
+			}
+			if j >= 0 && s[j] == '&' {
+				i = j
+				n--
+			} else {
+				n-- // bare semicolon
+			}
+		default:
+			n--
+		}
+	}
+	// Close any spans that were opened before the cut point.
+	head := s[:i]
+	open := strings.Count(head, "<span") - strings.Count(head, "</span")
+	if open <= 0 {
+		return head
+	}
+	return head + strings.Repeat("</span>", open)
 }
 
 func NewBlueMondayPolicy() *bluemonday.Policy {
