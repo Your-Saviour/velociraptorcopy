@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/Velocidex/ordereddict"
 	"google.golang.org/protobuf/proto"
@@ -159,10 +160,96 @@ func truncateLongLines(in string) string {
 	q_lines := strings.Split(in, "\n")
 	for i := range q_lines {
 		if len(q_lines[i]) > 200 {
-			q_lines[i] = q_lines[i][:200] + " ..."
+			q_lines[i] = smartTruncateLine(q_lines[i], 200)
 		}
 	}
 	return strings.Join(q_lines, "\n")
+}
+
+// smartTruncateLine cuts a VQL line at cutLen bytes, synthesising a closing
+// delimiter if the cut lands inside a string literal so chroma can lex it.
+func smartTruncateLine(line string, cutLen int) string {
+
+	type strState int
+	const (
+		stateNone     strState = iota
+		stateTriple            // '''...'''
+		stateSingle            // '...'
+		stateDouble            // "..."
+		stateBacktick          // `...`
+	)
+
+	state := stateNone
+	i := 0
+	for i < cutLen {
+		switch state {
+		case stateNone:
+			if i+2 < len(line) && line[i:i+3] == "'''" {
+				state = stateTriple
+				i += 3
+			} else if line[i] == '\'' {
+				state = stateSingle
+				i++
+			} else if line[i] == '"' {
+				state = stateDouble
+				i++
+			} else if line[i] == '`' {
+				state = stateBacktick
+				i++
+			} else {
+				i++
+			}
+		case stateTriple:
+			if i+2 < len(line) && line[i:i+3] == "'''" {
+				state = stateNone
+				i += 3
+			} else {
+				i++
+			}
+		case stateSingle:
+			if line[i] == '\\' && i+1 < len(line) {
+				i += 2
+				continue
+			}
+			if line[i] == '\'' {
+				state = stateNone
+			}
+			i++
+		case stateDouble:
+			if line[i] == '\\' && i+1 < len(line) {
+				i += 2
+				continue
+			}
+			if line[i] == '"' {
+				state = stateNone
+			}
+			i++
+		case stateBacktick:
+			if line[i] == '`' {
+				state = stateNone
+			}
+			i++
+		}
+	}
+
+	// Snap to a UTF-8 rune boundary.
+	for i < len(line) && !utf8.RuneStart(line[i]) {
+		i++
+	}
+
+	// Append closing delimiter if inside a string; " ..." is added by truncateChromaLines.
+	switch state {
+	case stateTriple:
+		return line[:i] + "'''"
+	case stateSingle:
+		return line[:i] + "'"
+	case stateDouble:
+		return line[:i] + `"`
+	case stateBacktick:
+		return line[:i] + "`"
+	default:
+		return line[:i]
+	}
 }
 
 func GenerateArtifactDescriptionReport(
@@ -170,10 +257,8 @@ func GenerateArtifactDescriptionReport(
 	template_engine TemplateEngine,
 	config_obj *config_proto.Config) (
 	string, error) {
+	// Clone so truncateLongLines does not mutate the original artifact.
 	artifact := proto.Clone(template_engine.GetArtifact()).(*artifacts_proto.Artifact)
-
-	// Ensure long lines in the artifact are truncated- This ensures
-	// the html DOM is not too large and keeps the browser fast.
 	for _, s := range artifact.Sources {
 		s.Query = truncateLongLines(s.Query)
 	}
