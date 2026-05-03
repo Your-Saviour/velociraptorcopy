@@ -1,3 +1,4 @@
+CLAUDE.md
 vendor/
 *~
 *.config.yaml
@@ -17,6 +18,7 @@ __debug_bin
 bin/rsrc.syso
 
 artifacts/assets/ab0x.go
+.worktrees/
 gui/assets/ab0x.go
 config/ab0x.go
 .eslintcache
