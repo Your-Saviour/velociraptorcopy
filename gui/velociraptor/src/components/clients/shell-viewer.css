@@ -134,3 +134,14 @@ div.dt-buttons {
     white-space: nowrap;
     display: inline-flex;
 }
+
+.notebook-output pre.stderr {
+    color: var(--bs-danger, #c00);
+}
+
+.notebook-output .stderr-label {
+    font-size: 0.85em;
+    opacity: 0.75;
+    margin-bottom: 2px;
+    color: var(--bs-danger, #c00);
+}

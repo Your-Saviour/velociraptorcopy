@@ -34,10 +34,17 @@ sources:
                 then=Stdout) AS Stdout,
              if(condition=len(list=Stdout) >= SizeLimit,
                 then=upload(accessor="data",
-                            file=Stdout, name="Stdout")) AS StdoutUpload
+                            file=Stdout, name="Stdout")) AS StdoutUpload,
+             if(condition=len(list=Stderr) < SizeLimit,
+                then=Stderr) AS Stderr,
+             if(condition=len(list=Stderr) >= SizeLimit,
+                then=upload(accessor="data",
+                            file=Stderr, name="Stderr")) AS StderrUpload
 
       FROM execve(argv=["cmd.exe", "/c", Command], length=10000000)
 
 column_types:
 - name: StdoutUpload
+  type: preview_upload
+- name: StderrUpload
   type: preview_upload

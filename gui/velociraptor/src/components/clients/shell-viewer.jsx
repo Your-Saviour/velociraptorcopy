@@ -231,16 +231,35 @@ class _VeloShellCell extends Component {
             let flow_id = this.props.flow.session_id;
 
             output = [this.state.output.map((item, index) => {
+                let stdoutNode;
                 if (item.StdoutUpload) {
-                    return <div className='notebook-output' key={index} >
-                             <PreviewUpload
-                               env={{client_id: client_id,
-                                 flow_id: flow_id}}
-                               upload={item.StdoutUpload} />
-                           </div>;
+                    stdoutNode = <PreviewUpload
+                                   env={{client_id: client_id,
+                                     flow_id: flow_id}}
+                                   upload={item.StdoutUpload} />;
+                } else {
+                    stdoutNode = <pre>{item.Stdout}</pre>;
                 }
-                return <div className='notebook-output' key={index} >
-                         <pre> {item.Stdout} </pre>
+
+                let stderrNode;
+                if (item.StderrUpload) {
+                    stderrNode = <div className="stderr-output">
+                                   <div className="stderr-label">{T("stderr")}</div>
+                                   <PreviewUpload
+                                     env={{client_id: client_id,
+                                       flow_id: flow_id}}
+                                     upload={item.StderrUpload} />
+                                 </div>;
+                } else if (item.Stderr) {
+                    stderrNode = <div className="stderr-output">
+                                   <div className="stderr-label">{T("stderr")}</div>
+                                   <pre className="stderr">{item.Stderr}</pre>
+                                 </div>;
+                }
+
+                return <div className='notebook-output' key={index}>
+                         {stdoutNode}
+                         {stderrNode}
                        </div>;
             })];
 
